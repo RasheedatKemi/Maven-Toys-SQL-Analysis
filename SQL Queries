@@ -1,0 +1,155 @@
+CREATE TABLE inventory(
+	store_id NUMERIC,
+	product_id NUMERIC,
+	stock_on_hand NUMERIC);
+
+CREATE TABLE products(
+	product_id NUMERIC,
+	product_name VARCHAR(50),
+	product_category VARCHAR(50),
+	product_cost NUMERIC (10,2),
+	product_price NUMERIC (10,2));
+
+CREATE TABLE sales(
+	sale_id NUMERIC,
+	date DATE,
+	store_id NUMERIC,
+	product_id NUMERIC,
+	units NUMERIC);
+
+CREATE TABLE stores(
+	store_id NUMERIC,
+	store_name VARCHAR(50),
+	store_city VARCHAR (50),
+	store_location VARCHAR(50),
+	store_open_date DATE);
+	
+--Which product categories drive the biggest profits? --
+SELECT p.product_category,
+	   SUM((p.product_price - p.product_cost) * s.units) AS profit_by_category
+FROM 
+	products AS p
+JOIN 
+	sales AS s
+ON
+	p.product_id = s.product_id
+GROUP BY
+	product_category
+ORDER BY
+	profit_by_category DESC;
+
+--Toys and Electronics generated the most profits--
+
+
+	
+--Is this the same across stores?--
+SELECT p.product_category,
+	   SUM((p.product_price - p.product_cost) * s.units) AS profit_by_category,
+	   st.store_location
+FROM 
+	products AS p
+JOIN 
+	sales AS s
+ON
+	p.product_id = s.product_id
+JOIN 
+	stores AS st
+ON	s.store_id = st.store_id
+GROUP BY
+	store_location,
+	product_category
+ORDER BY
+	profit_by_category DESC,
+	store_location;
+--Yes, Toys and Electronics generating the most sales is consistent across all store locations.--
+
+
+
+--How much money is tied up in inventory at the toy stores?--
+SELECT 
+	    st.store_location,
+		SUM (i.stock_on_hand * p.product_cost) AS money_tied_up
+FROM 
+	inventory AS i
+JOIN
+	products AS p
+ON 
+	i.product_id = p.product_id
+JOIN 
+	stores AS st
+ON
+	st.store_id = i.store_id
+GROUP BY
+	store_location
+ORDER BY
+	money_tied_up DESC;
+-- A total of $300,209.58 is tied up in inventory across toy stores with Downtown and Commercial store location having the largest unsold inventory--
+
+	
+--How long will it last?--
+--To calculate the total daily units sold---
+CREATE VIEW daily_sales AS (SELECT store_id,
+		product_id,
+		date,
+		SUM(units) AS daily_units_sold
+FROM 
+	sales
+GROUP BY
+	store_id,
+	product_id,
+	date
+ORDER BY
+	store_id ASC);
+
+--to calculate the average daily units sold--
+CREATE VIEW avg_daily_sales AS (
+		SELECT store_id,
+				product_id,
+				ROUND(AVG(daily_units_sold), 0) AS avg_daily_units_sold
+		FROM 
+			daily_sales
+		GROUP BY store_id,
+				  product_id);
+				  
+SELECT * FROM avg_daily_sales;
+SELECT * FROM inventory;
+
+--To calculate how long stocks in inventory lasts in days---
+SELECT 
+	i.store_id,
+	i.product_id,
+	i.stock_on_hand,
+	ads.avg_daily_units_sold,
+	ROUND((i.stock_on_hand/ads.avg_daily_units_sold),0) AS how_long_stock_would_last
+FROM 
+	inventory AS i
+JOIN 
+	avg_daily_sales AS ads
+ON 
+	i.product_id = ads.product_id
+AND 
+	i.store_id = ads.store_id;
+--The output displayes how long (in days)stocks in the inventory would last considering the average number of sales per day---
+
+
+ --Are sales being lost with out-of-stock products at certain locations?--
+ CREATE VIEW out_of_stock AS (SELECT
+ 	*
+FROM 
+	inventory
+WHERE stock_on_hand = 0);
+
+SELECT 
+	o.store_id,
+	o.product_id,
+	ads.avg_daily_units_sold AS daily_estimated_loss
+FROM
+	out_of_stock AS O
+JOIN
+	avg_daily_sales AS ads
+ON
+	o.store_id = ads.store_id
+AND
+	o.product_id = ads.product_id;
+
+--Yes. The estimated daily loss is the average number of products that should be sold per day but are out of stock--
